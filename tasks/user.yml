@@ -17,3 +17,14 @@
     home: "{{ (slurm_user | default({})).home | default(omit) }}"
     shell: "{{ (slurm_user | default({})).shell | default(omit) }}"
     system: "{{ (slurm_user | default({})).system | default('yes') }}"
+
+- name: Ensure slurm user home directory permissions
+  when:
+    - slurm_create_user | default(False)
+    - (slurm_user | default({})).home is defined
+  ansible.builtin.file:
+    path: "{{ (slurm_user | default({})).home }}"
+    state: directory
+    owner: "{{ (slurm_user | default({})).name | default('slurm') }}"
+    group: "{{ (slurm_user | default({})).group | default(omit) }}"
+    mode: "0755"
