@@ -1,5 +1,9 @@
 ---
 
+- name: Include build task
+  ansible.builtin.include_tasks: build.yml
+  when: self_build_slurm
+
 - name: Include user creation tasks
   ansible.builtin.include_tasks: user.yml
   when: slurm_create_user

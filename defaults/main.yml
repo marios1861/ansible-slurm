@@ -1,5 +1,8 @@
 ---
 
+self_build_slurm: false
+build_again: false
+slurm_version: "25.11.1"
 slurm_upgrade: false
 slurm_roles: []
 slurm_partitions: []
@@ -85,7 +88,16 @@ __slurm_redhat_packages:
   slurmd: [munge, slurm, slurm-slurmd]
   slurmdbd: [munge, slurm-slurmdbd]
 
-__slurm_packages: "{{ __slurm_debian_packages if __slurm_debian else __slurm_redhat_packages }}"
+__build_deps: [build-essential, fakeroot, devscripts, equivs]
+
+_slurm_self_packages:
+  client: [slurm-smd, slurm-smd-client]
+  slurmctld: [slurm-smd, slurm-smd-client, slurm-smd-slurmctld]
+  slurmd: [slurm-smd, slurm-smd-client, slurm-smd-slurmd]
+  slurmdbd: [slurm-smd, slurm-smd-client, slurm-smd-slurmdbd]
+  all: [slurm-smd, slurm-smd-client, slurm-smd-slurmctld, slurm-smd-slurmd, slurm-smd-slurmdbd]
+
+__slurm_packages: "{{ _slurm_self_packages if self_build_slurm else (__slurm_debian_packages if __slurm_debian else __slurm_redhat_packages) }}"
 
 __slurmdbd_config_default:
   AuthType: auth/munge

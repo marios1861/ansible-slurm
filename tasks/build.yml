@@ -1,0 +1,88 @@
+---
+
+- name: Build slurm in controller
+  when: "('slurmservers' in group_names or 'controller' in slurm_roles) and build_again"
+  block:
+    - name: Install Slurm build requirements
+      ansible.builtin.package:
+        name: "{{ __build_deps }}"
+        state: present
+
+    - name: Download Slurm source
+      ansible.builtin.get_url:
+        url: "https://download.schedmd.com/slurm/slurm-{{ slurm_version }}.tar.bz2"
+        mode: "755"
+        dest: "/tmp/slurm-{{ slurm_version }}.tar.bz2"
+
+    - name: Unpack Slurm source
+      ansible.builtin.unarchive:
+        src: "/tmp/slurm-{{ slurm_version }}.tar.bz2"
+        dest: /tmp/
+        remote_src: true
+
+    - name: Install Slurm package dependencies
+      ansible.builtin.command:
+        cmd: mk-build-deps -i -t 'apt-get -y' debian/control
+        chdir: "/tmp/slurm-{{ slurm_version }}"
+
+    - name: Build Slurm packages
+      ansible.builtin.command:
+        cmd: debuild -b -uc -us -j4
+        chdir: "/tmp/slurm-{{ slurm_version }}"
+      tags: rebuild_slurm
+
+    - name: Copy files to controller
+      ansible.builtin.fetch:
+        src: "/tmp/{{ item }}_{{ slurm_version }}-1_amd64.deb"
+        dest: /tmp/debs/{{ item }}.deb
+        flat: true
+      loop: "{{ __slurm_packages.all }}"
+
+    - name: Put built debs in correct folder
+      ansible.builtin.copy:
+        src: /tmp/debs/
+        dest: /var/backups/slurm_debs/
+        mode: "0755"
+
+- name: Put built debs in all nodes
+  ansible.builtin.copy:
+    src: /var/backups/slurm_debs/
+    dest: /var/backups/slurm_debs/
+    mode: "0755"
+  register: copy_result
+
+- name: Install dependency
+  ansible.builtin.package:
+    name: dpkg-dev
+    state: "present"
+
+- name: Create script to refresh the index
+  ansible.builtin.copy:
+    dest: /usr/local/bin/update-slurm-repo
+    mode: "0755"
+    content: |
+      #!/bin/bash
+      cd /var/backups/slurm_debs
+      dpkg-scanpackages . /dev/null | gzip -9c > Packages.gz
+      apt-get update
+- name: Run the index update for the first time
+  ansible.builtin.command: /usr/local/bin/update-slurm-repo
+  when: copy_result.changed
+  changed_when: true
+
+- name: Add local repo to APT sources
+  ansible.builtin.apt_repository:
+    repo: "deb [trusted=yes] file:/var/backups/slurm_debs ./"
+    state: present
+    filename: slurm_repo
+
+- name: Pin slurm-smd to version
+  ansible.builtin.copy:
+    dest: "/etc/apt/preferences.d/pin-{{ item }}"
+    content: |
+      Package: {{ item }}
+      Pin: version {{ slurm_version }}-1
+      Pin-Priority: 1001
+    mode: "0644"
+  loop: "{{ __slurm_packages.all }}"
+  tags: pin_package
