@@ -5,6 +5,7 @@
   shell: "sacctmgr -n list cluster | cut -f 4 -d ' '"
   become: yes
   become_user: root
+  changed_when: false
 
 - name: set cluster_check_boolean
   set_fact:
